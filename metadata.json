@@ -1,0 +1,6 @@
+{
+  "name": "Precio Ya",
+  "description": "Multi-Supermercado, Lector de Góndola y Carrito de Compras Inteligente",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
