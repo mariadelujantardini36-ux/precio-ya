@@ -24,7 +24,10 @@ import {
   TrendingDown,
   TrendingUp,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Lock,
+  ShieldCheck,
+  X
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Product, CartItem, Store, ScannedItem } from "./types";
@@ -62,138 +65,37 @@ const DEFAULT_PRODUCTS: Product[] = [
   }
 ];
 
-const STORES: Record<'elnene' | 'eltrebol' | 'eltrebol_suc2', { name: string; sheetId: string; sheetName: string; description: string }> = {
+const STORES: Record<'elnene' | 'eltrebol' | 'eltrebol_suc2', { name: string; description: string }> = {
   eltrebol_suc2: {
     name: "Súper 1: Súper Avenida",
-    sheetId: "15WS5l_44Fzbwe5mopUXUb_7kihpHY5RTiuTZmUJ9VX0",
-    sheetName: "DB - Súper Avenida",
-    description: "Sucursal céntrica conectada a Google Sheets en tiempo real."
+    description: "Sucursal céntrica conectada."
   },
   eltrebol: {
     name: "Súper 2: Súper El Trébol",
-    sheetId: "1VHKH9XZGlnT7AlGgqh9Du0hqhJ7bPWPhBsADkCfp8OU",
-    sheetName: "DB - Súper El Trébol",
-    description: "Excelente variedad en condimentos con catálogo en vivo."
+    description: "Excelente variedad en condimentos."
   },
   elnene: {
     name: "Súper 3: Súper El Nene",
-    sheetId: "1_0M9qogKPSpVBYTLcx8m7MXcUHmDH1N4dTllIFCREAU",
-    sheetName: "DB - Súper El Nene",
-    description: "Precios locales competitivos sincronizados por la API GViz."
+    description: "Precios locales competitivos."
   }
 };
 
 /**
- * Reads live data from Google Sheets via GViz API endpoint (/gviz/tq?tqx=out:json)
- * using cache-busting timestamp parameters to eliminate stale cache.
+ * Calls backend API /api/sync-sheets passing the admin PIN for server-side Google Sheets synchronization.
  */
-export async function fetchLiveProductsFromGoogleSheets(): Promise<{ products: Product[]; lastSync: string }> {
-  const storeMap: Array<{ key: 'elnene' | 'eltrebol' | 'eltrebol_suc2'; name: string; sheetId: string }> = [
-    { key: 'eltrebol_suc2', name: 'Súper 1 (Avenida)', sheetId: '15WS5l_44Fzbwe5mopUXUb_7kihpHY5RTiuTZmUJ9VX0' },
-    { key: 'eltrebol', name: 'Súper 2 (Trébol)', sheetId: '1VHKH9XZGlnT7AlGgqh9Du0hqhJ7bPWPhBsADkCfp8OU' },
-    { key: 'elnene', name: 'Súper 3 (Nene)', sheetId: '1_0M9qogKPSpVBYTLcx8m7MXcUHmDH1N4dTllIFCREAU' },
-  ];
-
-  const productDict: Record<string, Product> = {};
-
-  await Promise.all(
-    storeMap.map(async (store) => {
-      try {
-        const url = `https://docs.google.com/spreadsheets/d/${store.sheetId}/gviz/tq?tqx=out:json&headers=1&t=${Date.now()}`;
-        const res = await fetch(url, { cache: "no-store" });
-        if (!res.ok) return;
-
-        const text = await res.text();
-        const jsonStart = text.indexOf('{');
-        const jsonEnd = text.lastIndexOf('}');
-        if (jsonStart === -1 || jsonEnd === -1) return;
-
-        const jsonStr = text.substring(jsonStart, jsonEnd + 1);
-        const data = JSON.parse(jsonStr);
-
-        if (!data.table || !data.table.rows) return;
-
-        const cols: Array<{ label?: string }> = data.table.cols || [];
-        let codeIdx = cols.findIndex(c => c?.label?.toLowerCase().includes('cod'));
-        let nameIdx = cols.findIndex(c => c?.label?.toLowerCase().includes('prod') || c?.label?.toLowerCase().includes('nom') || c?.label?.toLowerCase().includes('desc'));
-        let priceIdx = cols.findIndex(c => c?.label?.toLowerCase().includes('prec') || c?.label?.toLowerCase().includes('val') || c?.label?.toLowerCase().includes('$'));
-        let catIdx = cols.findIndex(c => c?.label?.toLowerCase().includes('cat') || c?.label?.toLowerCase().includes('rub'));
-
-        if (codeIdx === -1) codeIdx = 0;
-        if (nameIdx === -1) nameIdx = 1;
-        if (priceIdx === -1) priceIdx = 2;
-        if (catIdx === -1) catIdx = 3;
-
-        for (const row of data.table.rows) {
-          if (!row || !row.c) continue;
-          const cells = row.c;
-
-          const rawCode = cells[codeIdx]?.f ?? cells[codeIdx]?.v;
-          if (rawCode === null || rawCode === undefined || String(rawCode).trim() === '') continue;
-
-          const barcode = String(rawCode).trim();
-          const rawName = cells[nameIdx]?.v ?? cells[nameIdx]?.f;
-          const name = rawName ? String(rawName).trim() : `Producto ${barcode}`;
-          if (!name) continue;
-
-          const rawPrice = cells[priceIdx]?.v ?? cells[priceIdx]?.f;
-          let price = 0;
-          if (typeof rawPrice === 'number') {
-            price = rawPrice;
-          } else if (typeof rawPrice === 'string') {
-            const cleaned = rawPrice.replace(/[^0-9.,]/g, '').replace(',', '.');
-            price = parseFloat(cleaned) || 0;
-          }
-
-          const rawCat = cells[catIdx]?.v ?? cells[catIdx]?.f;
-          const category = rawCat ? String(rawCat).trim() : 'Almacén';
-
-          const dictKey = barcode.toLowerCase();
-
-          if (!productDict[dictKey]) {
-            productDict[dictKey] = {
-              barcode,
-              name,
-              category,
-              prices: {
-                elnene: 0,
-                eltrebol: 0,
-                eltrebol_suc2: 0,
-              }
-            };
-          }
-
-          productDict[dictKey].prices[store.key] = price;
-
-          if (name && (!productDict[dictKey].name || productDict[dictKey].name.startsWith('Producto '))) {
-            productDict[dictKey].name = name;
-          }
-          if (category && category !== 'Almacén') {
-            productDict[dictKey].category = category;
-          }
-        }
-      } catch (err) {
-        console.error(`Error fetching sheet for ${store.name}:`, err);
-      }
-    })
-  );
-
-  const resultList = Object.values(productDict).map(prod => {
-    const validPrices = Object.values(prod.prices).filter(p => p > 0);
-    const avgPrice = validPrices.length > 0 ? Math.round(validPrices.reduce((a, b) => a + b, 0) / validPrices.length) : 1000;
-
-    return {
-      ...prod,
-      prices: {
-        elnene: prod.prices.elnene > 0 ? prod.prices.elnene : avgPrice,
-        eltrebol: prod.prices.eltrebol > 0 ? prod.prices.eltrebol : avgPrice,
-        eltrebol_suc2: prod.prices.eltrebol_suc2 > 0 ? prod.prices.eltrebol_suc2 : avgPrice,
-      }
-    };
+export async function syncSheetsFromBackend(pin: string): Promise<{ products: Product[]; lastSync: string }> {
+  const res = await fetch('/api/sync-sheets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin })
   });
 
-  const now = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  return { products: resultList, lastSync: now };
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Error de autorización o sincronización.');
+  }
+
+  return { products: data.products, lastSync: data.lastSync };
 }
 
 interface Toast {
@@ -241,37 +143,53 @@ export default function App() {
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
 
-  const syncLiveFromGoogleSheets = async (showToast = true) => {
+  // Admin PIN Modal States
+  const [showPinModal, setShowPinModal] = useState<boolean>(false);
+  const [adminPinInput, setAdminPinInput] = useState<string>("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [isVerifyingPin, setIsVerifyingPin] = useState<boolean>(false);
+
+  const handleOpenSyncModal = () => {
+    setAdminPinInput("");
+    setPinError(null);
+    setShowPinModal(true);
+  };
+
+  const handleAdminSyncSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!adminPinInput.trim()) {
+      setPinError("Por favor ingresá el PIN de administrador.");
+      return;
+    }
+
+    setIsVerifyingPin(true);
+    setPinError(null);
     setIsSyncingSheets(true);
     setSyncError(null);
+
     try {
-      const { products: fetchedProducts, lastSync } = await fetchLiveProductsFromGoogleSheets();
+      const { products: fetchedProducts, lastSync } = await syncSheetsFromBackend(adminPinInput.trim());
       if (fetchedProducts.length > 0) {
         setProducts(fetchedProducts);
         setLastSyncTime(lastSync);
-        if (showToast) {
-          addToast("Sincronización en Vivo", `Cargados ${fetchedProducts.length} productos directamente desde Google Sheets (${lastSync})`, "success");
-        }
+        addToast("Sincronización Exitosa", `Precios actualizados (${fetchedProducts.length} productos) a las ${lastSync}`, "success");
+        setShowPinModal(false);
+        setAdminPinInput("");
       } else {
-        if (showToast) {
-          addToast("Aviso de Sincronización", "No se encontraron datos en las planillas de Google Sheets.", "info");
-        }
+        addToast("Aviso de Sincronización", "No se encontraron productos en las planillas.", "info");
+        setShowPinModal(false);
+        setAdminPinInput("");
       }
-    } catch (err) {
-      console.error("Error al sincronizar Google Sheets:", err);
-      setSyncError("Error de conexión al cargar planillas.");
-      if (showToast) {
-        addToast("Error de Sincronización", "No se pudieron obtener los datos de Google Sheets.", "error");
-      }
+    } catch (err: any) {
+      const errorMsg = err.message || "Error al sincronizar datos.";
+      setPinError(errorMsg);
+      setSyncError(errorMsg);
+      addToast("Acceso Denegado", errorMsg, "error");
     } finally {
+      setIsVerifyingPin(false);
       setIsSyncingSheets(false);
     }
   };
-
-  // Auto-sync real-time data on application startup
-  useEffect(() => {
-    syncLiveFromGoogleSheets(false);
-  }, []);
 
   // New product form states
   const [showAddProductModal, setShowAddProductModal] = useState<boolean>(false);
@@ -297,7 +215,6 @@ export default function App() {
 
     if (cameraActive) {
       setCameraError(null);
-      // Wait a brief tick for the container #camera-reader to be fully rendered
       const timer = setTimeout(() => {
         if (!isMounted) return;
         try {
@@ -323,9 +240,7 @@ export default function App() {
                 handleBarcodeSearch(decodedText);
               }
             },
-            () => {
-              // Ignore standard scanning frame errors
-            }
+            () => {}
           ).catch(err => {
             if (isMounted) {
               console.error("Error starting camera", err);
@@ -417,18 +332,15 @@ export default function App() {
     setBarcodeInput(prev => prev.slice(0, -1));
   };
 
-  // Flexible search helper to locate a product in the global database by barcode or name
   const findProductInDatabase = (query: string, productsList: Product[] = products): Product | undefined => {
     if (!query) return undefined;
     const rawQuery = String(query).trim();
     const cleanQuery = rawQuery.toLowerCase();
     if (!cleanQuery) return undefined;
 
-    // 1. Exact string match on barcode
     let found = productsList.find(p => String(p.barcode).trim().toLowerCase() === cleanQuery);
     if (found) return found;
 
-    // 2. Ignore leading zeros (e.g. "0779..." vs "779...")
     const queryNoZeros = cleanQuery.replace(/^0+/, "");
     if (queryNoZeros) {
       found = productsList.find(p => {
@@ -438,7 +350,6 @@ export default function App() {
       if (found) return found;
     }
 
-    // 3. Numeric match if both query and barcode are numeric digits
     if (/^\d+$/.test(rawQuery)) {
       found = productsList.find(p => {
         const pCode = String(p.barcode).trim();
@@ -454,11 +365,9 @@ export default function App() {
       if (found) return found;
     }
 
-    // 4. Substring barcode match
     found = productsList.find(p => String(p.barcode).toLowerCase().includes(cleanQuery));
     if (found) return found;
 
-    // 5. Product name match (case-insensitive substring)
     found = productsList.find(p => p.name.toLowerCase().includes(cleanQuery));
     if (found) return found;
 
@@ -469,7 +378,6 @@ export default function App() {
     const query = (codeToSearch || barcodeInput).trim();
     if (!query) return;
 
-    // Trigger scanning effect
     setIsScanning(true);
     playBeep();
     setTimeout(() => setIsScanning(false), 500);
@@ -477,7 +385,6 @@ export default function App() {
     const product = findProductInDatabase(query, products);
     if (product) {
       setScannedBarcode(product.barcode);
-      // Add to recently scanned list using canonical product barcode
       setRecentlyScanned(prev => {
         const filtered = prev.filter(item => String(item.barcode).trim().toLowerCase() !== String(product.barcode).trim().toLowerCase());
         const newItem: ScannedItem = {
@@ -534,16 +441,6 @@ export default function App() {
     playBeep();
   };
 
-  // Restores default values
-  const resetToDefaults = () => {
-    if (window.confirm("¿Seguro que deseas restablecer todos los productos y precios de la base de datos a sus valores iniciales?")) {
-      setProducts(DEFAULT_PRODUCTS);
-      localStorage.removeItem("precioya_products");
-      addToast("Base de Datos Restablecida", "Valores por defecto cargados con éxito.", "info");
-      playBeep();
-    }
-  };
-
   const handleAddProductSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBarcode || !newName) {
@@ -571,7 +468,6 @@ export default function App() {
     addToast("Producto Creado", `${newName} agregado a las góndolas.`, "success");
     playBeep();
 
-    // Reset Form
     setNewBarcode("");
     setNewName("");
     setNewCategory("Condimentos");
@@ -609,16 +505,13 @@ export default function App() {
     }
   };
 
-  // Calculations for current cart
   const currentScannedProduct = findProductInDatabase(scannedBarcode, products);
 
-  // Promotional discount calculator
   const calculateCartSummary = () => {
     let subtotal = 0;
     let discount = 0;
     const promoBreakdown: { name: string; amount: number }[] = [];
 
-    // Map cart items with active prices
     const itemsWithPrices = cart.map(item => {
       const product = findProductInDatabase(item.barcode, products);
       const price = product ? product.prices[activeStoreId] : 0;
@@ -631,12 +524,9 @@ export default function App() {
       };
     });
 
-    // Subtotal
     subtotal = itemsWithPrices.reduce((sum, item) => sum + item.itemTotal, 0);
 
-    // Apply store promotions
     if (activeStoreId === "elnene") {
-      // 10% OFF en Fideos Tallarín ("7790840110105") llevando 2 o más
       const tallarinItem = itemsWithPrices.find(item => item.barcode === "7790840110105");
       if (tallarinItem && tallarinItem.quantity >= 2) {
         const itemDiscount = tallarinItem.itemTotal * 0.1;
@@ -647,8 +537,6 @@ export default function App() {
         });
       }
     } else if (activeStoreId === "eltrebol") {
-      // 2x1 en Condimentos Alicante (Pimentón "7790070318458" y Chimichurri "7798159445365")
-      // We calculate per product basis
       const pimentonItem = itemsWithPrices.find(item => item.barcode === "7790070318458");
       if (pimentonItem && pimentonItem.quantity >= 2) {
         const freeItems = Math.floor(pimentonItem.quantity / 2);
@@ -671,7 +559,6 @@ export default function App() {
         });
       }
     } else if (activeStoreId === "eltrebol_suc2") {
-      // 5% OFF en Pimentón Dulce ("7790070318458") llevando 3 o más
       const pimentonItem = itemsWithPrices.find(item => item.barcode === "7790070318458");
       if (pimentonItem && pimentonItem.quantity >= 3) {
         const itemDiscount = pimentonItem.itemTotal * 0.05;
@@ -696,7 +583,6 @@ export default function App() {
 
   const cartSummary = calculateCartSummary();
 
-  // Suggested alternatives of the same category
   const suggestedAlternatives = currentScannedProduct
     ? products.filter(p => p.category === currentScannedProduct.category && p.barcode !== currentScannedProduct.barcode)
     : [];
@@ -758,7 +644,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Sound Toggle */}
             <button 
               onClick={() => setSoundEnabled(!soundEnabled)} 
               title={soundEnabled ? "Silenciar lector" : "Activar bip"}
@@ -808,10 +693,10 @@ export default function App() {
           {/* TABS DE SECCIÓN Y BOTÓN SINCRONIZAR */}
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
             <button
-              onClick={() => syncLiveFromGoogleSheets(true)}
+              onClick={handleOpenSyncModal}
               disabled={isSyncingSheets}
               className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-60 text-white font-bold py-2 px-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/10 shrink-0"
-              title="Cargar productos en tiempo real desde Google Sheets"
+              title="Cargar precios actualizados mediante PIN de administrador"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncingSheets ? 'animate-spin' : ''}`} />
               <span>{isSyncingSheets ? 'Sincronizando...' : 'Actualizar Sheets'}</span>
@@ -834,7 +719,7 @@ export default function App() {
                 id="tab-db"
                 onClick={() => {
                   setActiveTab('db');
-                  addToast("Base de Datos", "Planilla de Precios Vinculada a Google Sheets", "info");
+                  addToast("Base de Datos", "Listado de Productos Sincronizados", "info");
                 }} 
                 className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
                   activeTab === 'db' 
@@ -899,7 +784,6 @@ export default function App() {
                   {cameraActive ? "Cámara Escáner Activa" : "Lector En Línea"}
                 </span>
                 
-                {/* Simulated laser lines */}
                 {!cameraActive && (
                   <div className={`absolute left-0 right-0 h-0.5 bg-rose-600/70 shadow-[0_0_8px_rgba(239,68,68,0.8)] transition-all ${
                     isScanning ? 'top-1/2 scale-y-[4] bg-emerald-500/80 shadow-[0_0_12px_rgba(16,185,129,0.9)]' : 'top-1/3 animate-bounce'
@@ -916,7 +800,6 @@ export default function App() {
                 
                 {cameraActive ? (
                   <div className="w-full flex flex-col items-center gap-3 mt-6">
-                    {/* Camera view container */}
                     <div className="w-full rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 aspect-video relative max-w-[280px]">
                       <div id="camera-reader" className="w-full h-full"></div>
                       <div className="absolute inset-0 border-2 border-emerald-500/30 pointer-events-none rounded-2xl"></div>
@@ -974,7 +857,6 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  /* TARJETA DE PRODUCTO ESCANEADO */
                   <div id="result-card" className="bg-white rounded-3xl p-5 border border-emerald-100 shadow-md flex flex-col gap-5">
                     
                     <div className="flex justify-between items-start border-b border-slate-100 pb-3">
@@ -1000,7 +882,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* PRECIO PRINCIPAL DEL LOCAL SELECCIONADO */}
                     <div className="bg-gradient-to-br from-amber-50 to-amber-100/60 border border-amber-200/50 rounded-2xl p-4 flex justify-between items-center shadow-inner">
                       <div>
                         <span className="text-[10px] text-amber-800 uppercase font-bold tracking-wider block">Precio de Góndola Activa</span>
@@ -1013,7 +894,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* COMPARADOR DE PRECIOS CON OTROS LOCALES */}
                     <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-150">
                       <span className="text-[9px] text-slate-400 uppercase font-bold tracking-widest block mb-2 flex items-center gap-1.5">
                         <ArrowRightLeft className="w-3.5 h-3.5 text-slate-400" />
@@ -1026,7 +906,6 @@ export default function App() {
                           const price = currentScannedProduct.prices[storeKey];
                           const isActive = activeStoreId === storeKey;
                           
-                          // Calculate price diff compared to active store
                           const activePrice = currentScannedProduct.prices[activeStoreId];
                           const isCheaper = price < activePrice;
                           const isMoreExpensive = price > activePrice;
@@ -1077,7 +956,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* AGREGAR AL CARRITO ACCIÓN */}
                     <button 
                       id="add-to-cart-btn"
                       onClick={() => addToCart(currentScannedProduct.barcode)} 
@@ -1087,7 +965,6 @@ export default function App() {
                       Sumar al Carrito de Góndola
                     </button>
 
-                    {/* ALTERNATIVAS SUGERIDAS */}
                     <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
                       <span className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-emerald-500 animate-spin" style={{ animationDuration: '4s' }} />
@@ -1161,7 +1038,6 @@ export default function App() {
                     </button>
                   </div>
 
-                  {/* COINCIDENCIAS EN TIEMPO REAL */}
                   {barcodeInput.trim() && (
                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 max-h-48 overflow-y-auto flex flex-col gap-1 mt-1 shadow-inner">
                       <span className="text-[9px] font-extrabold text-slate-400 uppercase px-1">
@@ -1198,7 +1074,6 @@ export default function App() {
                   )}
                 </div>
 
-                {/* DIGITAL NUMPAD */}
                 <div className="grid grid-cols-3 gap-2">
                   {["7", "8", "9", "4", "5", "6", "1", "2", "3"].map(num => (
                     <button 
@@ -1235,7 +1110,6 @@ export default function App() {
             {/* COLUMNA CENTRAL: BANCO DE PRUEBAS, OFERTAS E HISTORIAL */}
             <section className="lg:col-span-4 flex flex-col gap-6">
               
-              {/* BANCO DE PRUEBAS PRODUCTOS DE BASE DE DATOS */}
               <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm flex flex-col gap-3">
                 <div className="flex justify-between items-center">
                   <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -1392,7 +1266,6 @@ export default function App() {
                   )}
                 </div>
 
-                {/* ITEMS EN EL CARRITO */}
                 <div id="cart-items" className="flex-grow flex flex-col gap-2 overflow-y-auto max-h-[300px] pr-1">
                   {cart.length === 0 ? (
                     <div id="cart-empty-message" className="text-center py-20 flex flex-col items-center gap-2">
@@ -1438,9 +1311,7 @@ export default function App() {
                   )}
                 </div>
 
-                {/* RESUMEN DE COMPRA */}
                 <div className="border-t border-slate-100 pt-3.5 flex flex-col gap-2.5 bg-white">
-                  
                   <div className="flex justify-between text-xs text-slate-500 font-semibold px-1">
                     <span>Subtotal de Carrito:</span>
                     <span id="cart-subtotal" className="font-mono">${cartSummary.subtotal.toLocaleString('es-AR')}</span>
@@ -1466,7 +1337,6 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* GRAND TOTAL */}
                   <div className="bg-slate-900 text-white rounded-2xl p-4 mt-1 shadow-md border border-slate-800 relative overflow-hidden">
                     <div className="absolute right-0 bottom-0 translate-x-4 translate-y-4 opacity-5 pointer-events-none">
                       <ShoppingCart className="w-24 h-24" />
@@ -1498,7 +1368,7 @@ export default function App() {
           </div>
         )}
 
-        {/* VISTA BASE DE DATOS (PLANILLA INTEGRADA) */}
+        {/* VISTA BASE DE DATOS */}
         {activeTab === "db" && (
           <div id="view-db" className="w-full">
             <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm max-w-5xl mx-auto flex flex-col gap-6">
@@ -1510,24 +1380,24 @@ export default function App() {
                   </div>
                   <div>
                     <h2 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                      Planillas de Google Sheets Conectadas
+                      Base de Datos de Productos
                       <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full uppercase flex items-center gap-1 font-mono">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                        GVIZ LIVE STREAM
+                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                        SISTEMA PROTEGIDO
                       </span>
                     </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">Lectura en tiempo real con el endpoint <code>/gviz/tq?tqx=out:json</code> sin caché</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Sincronización segura protegida con clave de administrador</p>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto shrink-0">
                   <button 
-                    onClick={() => syncLiveFromGoogleSheets(true)}
+                    onClick={handleOpenSyncModal}
                     disabled={isSyncingSheets}
                     className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/10"
                   >
                     <RefreshCw className={`w-4 h-4 ${isSyncingSheets ? 'animate-spin' : ''}`} />
-                    {isSyncingSheets ? 'Leyendo Sheets...' : 'Sincronizar en Vivo'}
+                    {isSyncingSheets ? 'Leyendo...' : 'Actualizar Sheets'}
                   </button>
                   <button 
                     onClick={() => setShowAddProductModal(true)}
@@ -1539,16 +1409,16 @@ export default function App() {
                 </div>
               </div>
 
-              {/* SHEET INFO BAR */}
+              {/* STORE STATUS BAR (PRIVACY PROTECTED) */}
               <div className="flex flex-col gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-150 text-xs">
                 <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
                   <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider flex items-center gap-1.5">
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                    URLs de Lectura Configuradas (Formato GViz JSON)
+                    <StoreIcon className="w-3.5 h-3.5 text-emerald-600" />
+                    Supermercados Vinculados al Sistema
                   </span>
                   <span className="text-emerald-700 font-bold text-[11px] flex items-center gap-1">
                     <Clock className="w-3 h-3 text-emerald-600" />
-                    Última actualización: <span className="font-mono">{lastSyncTime || 'Sincronizando...'}</span>
+                    Última actualización: <span className="font-mono">{lastSyncTime || 'Pendiente'}</span>
                   </span>
                 </div>
 
@@ -1574,28 +1444,12 @@ export default function App() {
                             </span>
                           )}
                         </div>
-                        <p className="text-[9px] text-slate-400 font-mono break-all select-all font-semibold mt-0.5">
-                          ID: {store.sheetId}
+                        <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+                          {store.description}
                         </p>
-                        <div className="flex items-center justify-between mt-2 pt-1 border-t border-slate-100">
-                          <a 
-                            href={`https://docs.google.com/spreadsheets/d/${store.sheetId}/gviz/tq?tqx=out:json`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600 hover:text-emerald-800 hover:underline font-mono"
-                          >
-                            Ver Endpoint GViz JSON ↗
-                          </a>
-                          <a 
-                            href={`https://docs.google.com/spreadsheets/d/${store.sheetId}/edit`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 text-[9px] font-bold text-slate-500 hover:text-slate-800 hover:underline"
-                          >
-                            Editar Sheet ↗
-                          </a>
+                        <div className="mt-2 pt-1 border-t border-slate-100 flex items-center gap-1 text-[9px] text-emerald-700 font-semibold">
+                          <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                          <span>Conexión Servidor Protegida</span>
                         </div>
                       </div>
                     );
@@ -1607,9 +1461,9 @@ export default function App() {
               <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-2xl flex gap-3 text-xs text-emerald-900">
                 <Sparkles className="w-4.5 h-4.5 text-emerald-600 mt-0.5 shrink-0" />
                 <div className="leading-relaxed">
-                  <p className="font-bold">¡Lectura Directa en Tiempo Real Conectada!</p>
+                  <p className="font-bold">Actualización de Precios Segura</p>
                   <p className="text-[11px] text-emerald-800 mt-0.5">
-                    Cada vez que cargues o modifiques un producto en tus 3 planillas de Google Sheets, la aplicación lee los datos directamente con el formato <code>/gviz/tq?tqx=out:json</code> sin usar caché previa. Hacé clic en <strong>"Sincronizar en Vivo"</strong> para refrescar los precios inmediatamente.
+                    Los precios de Súper El Nene, Súper El Trébol y Súper Avenida son gestionados de manera independiente desde sus respectivas planillas. Hacé clic en <strong>"Actualizar Sheets"</strong> e ingresá el PIN de administrador para refrescar los valores en tiempo real.
                   </p>
                 </div>
               </div>
@@ -1638,7 +1492,6 @@ export default function App() {
                             {prod.category}
                           </span>
                         </td>
-                        {/* El Nene Price Input */}
                         <td className="p-2 bg-emerald-50/25 border-x border-slate-150">
                           <div className="flex items-center justify-center">
                             <span className="text-slate-400 mr-1 font-bold">$</span>
@@ -1650,7 +1503,6 @@ export default function App() {
                             />
                           </div>
                         </td>
-                        {/* El Trébol Price Input */}
                         <td className="p-2 bg-sky-50/25 border-x border-slate-150">
                           <div className="flex items-center justify-center">
                             <span className="text-slate-400 mr-1 font-bold">$</span>
@@ -1662,7 +1514,6 @@ export default function App() {
                             />
                           </div>
                         </td>
-                        {/* Avenida Price Input */}
                         <td className="p-2 bg-amber-50/25 border-x border-slate-150">
                           <div className="flex items-center justify-center">
                             <span className="text-slate-400 mr-1 font-bold">$</span>
@@ -1736,6 +1587,76 @@ export default function App() {
           </div>
         </div>
       </section>
+
+      {/* MODAL DE PIN DE ADMINISTRADOR */}
+      {showPinModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 flex flex-col gap-4 relative animate-in fade-in zoom-in duration-200">
+            <button 
+              onClick={() => setShowPinModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-all"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <div className="bg-emerald-100 text-emerald-700 p-3 rounded-2xl border border-emerald-200 shadow-sm">
+                <Lock className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">Acceso Administrador</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Sincronización segura de Google Sheets</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleAdminSyncSubmit} className="flex flex-col gap-4">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1.5">
+                  PIN General de Administrador
+                </label>
+                <input 
+                  type="password"
+                  required
+                  autoFocus
+                  maxLength={10}
+                  placeholder="Ingresá la clave de acceso..."
+                  value={adminPinInput}
+                  onChange={(e) => setAdminPinInput(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Este PIN autorizará al servidor a consultar los precios actualizados de Súper El Nene, Súper El Trébol y Súper Avenida.
+                </p>
+              </div>
+
+              {pinError && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded-xl text-xs flex items-center gap-2 font-semibold">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{pinError}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end mt-2">
+                <button 
+                  type="button"
+                  onClick={() => setShowPinModal(false)}
+                  className="px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl text-xs transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isVerifyingPin}
+                  className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-60 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isVerifyingPin ? 'animate-spin' : ''}`} />
+                  <span>{isVerifyingPin ? 'Verificando y Cargando...' : 'Confirmar y Actualizar'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL NUEVO PRODUCTO */}
       {showAddProductModal && (
@@ -1851,9 +1772,8 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
           <p>© 2026 Precio Ya - Lector de Góndola y Carrito Recalculable. Desarrollado en React & Tailwind CSS.</p>
           <div className="flex gap-4">
-            <span>Soporte Sheets API</span>
-            <span>Planilla Conectada</span>
-            <span>Simulador de Presupuestos v4</span>
+            <span>Base de Datos Protegida</span>
+            <span>Sincronización Segura v4</span>
           </div>
         </div>
       </footer>
