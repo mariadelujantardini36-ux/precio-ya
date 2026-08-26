@@ -17,6 +17,8 @@ export interface Promo {
 export interface Store {
   id: 'elnene' | 'eltrebol' | 'eltrebol_suc2';
   name: string;
+  sheetId: string;
+  sheetName: string;
   promos: Promo[];
 }
 
