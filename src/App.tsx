@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Product, CartItem, Store, ScannedItem } from "./types";
+import { STORES_CONFIG, StoreConfigEntry } from "./stores.config";
+import { getStoreColor } from "./storeColors";
 
 const DEFAULT_PRODUCTS: Product[] = [
   {
@@ -62,37 +64,19 @@ const DEFAULT_PRODUCTS: Product[] = [
   }
 ];
 
-const STORES: Record<'elnene' | 'eltrebol' | 'eltrebol_suc2', { name: string; sheetId: string; sheetName: string; description: string }> = {
-  eltrebol_suc2: {
-    name: "Súper 1: Súper Avenida",
-    sheetId: "15WS5l_44Fzbwe5mopUXUb_7kihpHY5RTiuTZmUJ9VX0",
-    sheetName: "DB - Súper Avenida",
-    description: "Sucursal céntrica conectada a Google Sheets en tiempo real."
-  },
-  eltrebol: {
-    name: "Súper 2: Súper El Trébol",
-    sheetId: "1VHKH9XZGlnT7AlGgqh9Du0hqhJ7bPWPhBsADkCfp8OU",
-    sheetName: "DB - Súper El Trébol",
-    description: "Excelente variedad en condimentos con catálogo en vivo."
-  },
-  elnene: {
-    name: "Súper 3: Súper El Nene",
-    sheetId: "1_0M9qogKPSpVBYTLcx8m7MXcUHmDH1N4dTllIFCREAU",
-    sheetName: "DB - Súper El Nene",
-    description: "Precios locales competitivos sincronizados por la API GViz."
-  }
-};
+const STORES: Record<string, StoreConfigEntry> = STORES_CONFIG.reduce((acc, store) => {
+  acc[store.id] = store;
+  return acc;
+}, {} as Record<string, StoreConfigEntry>);
 
 /**
  * Reads live data from Google Sheets via GViz API endpoint (/gviz/tq?tqx=out:json)
  * using cache-busting timestamp parameters to eliminate stale cache.
+ * Loops dynamically over every supermarket configured en stores.config.ts,
+ * sin importar cuántos sean.
  */
 export async function fetchLiveProductsFromGoogleSheets(): Promise<{ products: Product[]; lastSync: string }> {
-  const storeMap: Array<{ key: 'elnene' | 'eltrebol' | 'eltrebol_suc2'; name: string; sheetId: string }> = [
-    { key: 'eltrebol_suc2', name: 'Súper 1 (Avenida)', sheetId: '15WS5l_44Fzbwe5mopUXUb_7kihpHY5RTiuTZmUJ9VX0' },
-    { key: 'eltrebol', name: 'Súper 2 (Trébol)', sheetId: '1VHKH9XZGlnT7AlGgqh9Du0hqhJ7bPWPhBsADkCfp8OU' },
-    { key: 'elnene', name: 'Súper 3 (Nene)', sheetId: '1_0M9qogKPSpVBYTLcx8m7MXcUHmDH1N4dTllIFCREAU' },
-  ];
+  const storeMap = STORES_CONFIG.map(store => ({ key: store.id, name: store.name, sheetId: store.sheetId }));
 
   const productDict: Record<string, Product> = {};
 
@@ -155,11 +139,7 @@ export async function fetchLiveProductsFromGoogleSheets(): Promise<{ products: P
               barcode,
               name,
               category,
-              prices: {
-                elnene: 0,
-                eltrebol: 0,
-                eltrebol_suc2: 0,
-              }
+              prices: Object.fromEntries(STORES_CONFIG.map(s => [s.id, 0]))
             };
           }
 
@@ -182,14 +162,13 @@ export async function fetchLiveProductsFromGoogleSheets(): Promise<{ products: P
     const validPrices = Object.values(prod.prices).filter(p => p > 0);
     const avgPrice = validPrices.length > 0 ? Math.round(validPrices.reduce((a, b) => a + b, 0) / validPrices.length) : 1000;
 
-    return {
-      ...prod,
-      prices: {
-        elnene: prod.prices.elnene > 0 ? prod.prices.elnene : avgPrice,
-        eltrebol: prod.prices.eltrebol > 0 ? prod.prices.eltrebol : avgPrice,
-        eltrebol_suc2: prod.prices.eltrebol_suc2 > 0 ? prod.prices.eltrebol_suc2 : avgPrice,
-      }
-    };
+    const filledPrices: Record<string, number> = {};
+    STORES_CONFIG.forEach(s => {
+      const val = prod.prices[s.id] || 0;
+      filledPrices[s.id] = val > 0 ? val : avgPrice;
+    });
+
+    return { ...prod, prices: filledPrices };
   });
 
   const now = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -223,7 +202,7 @@ export default function App() {
     return DEFAULT_PRODUCTS;
   });
 
-  const [activeStoreId, setActiveStoreId] = useState<'elnene' | 'eltrebol' | 'eltrebol_suc2'>("elnene");
+  const [activeStoreId, setActiveStoreId] = useState<string>(STORES_CONFIG[0]?.id || "elnene");
   const [activeTab, setActiveTab] = useState<'consultar' | 'db'>("consultar");
   const [barcodeInput, setBarcodeInput] = useState<string>("");
   const [scannedBarcode, setScannedBarcode] = useState<string>("");
@@ -272,15 +251,6 @@ export default function App() {
   useEffect(() => {
     syncLiveFromGoogleSheets(false);
   }, []);
-
-  // New product form states
-  const [showAddProductModal, setShowAddProductModal] = useState<boolean>(false);
-  const [newBarcode, setNewBarcode] = useState<string>("");
-  const [newName, setNewName] = useState<string>("");
-  const [newCategory, setNewCategory] = useState<string>("Condimentos");
-  const [newPriceNene, setNewPriceNene] = useState<number>(1000);
-  const [newPriceTrebol, setNewPriceTrebol] = useState<number>(1000);
-  const [newPriceAvenida, setNewPriceAvenida] = useState<number>(1000);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
 
@@ -397,7 +367,7 @@ export default function App() {
     }, 3000);
   };
 
-  const handleStoreChange = (storeId: 'elnene' | 'eltrebol' | 'eltrebol_suc2') => {
+  const handleStoreChange = (storeId: string) => {
     setActiveStoreId(storeId);
     playBeep();
     setIsScanning(true);
@@ -544,71 +514,6 @@ export default function App() {
     }
   };
 
-  const handleAddProductSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newBarcode || !newName) {
-      addToast("Error", "Por favor completa el nombre y el código de barras.", "error");
-      return;
-    }
-
-    if (products.some(p => p.barcode === newBarcode)) {
-      addToast("Error", "Este código de barras ya existe.", "error");
-      return;
-    }
-
-    const created: Product = {
-      barcode: newBarcode,
-      name: newName,
-      category: newCategory,
-      prices: {
-        elnene: Number(newPriceNene),
-        eltrebol: Number(newPriceTrebol),
-        eltrebol_suc2: Number(newPriceAvenida)
-      }
-    };
-
-    setProducts(prev => [...prev, created]);
-    addToast("Producto Creado", `${newName} agregado a las góndolas.`, "success");
-    playBeep();
-
-    // Reset Form
-    setNewBarcode("");
-    setNewName("");
-    setNewCategory("Condimentos");
-    setNewPriceNene(1000);
-    setNewPriceTrebol(1000);
-    setNewPriceAvenida(1000);
-    setShowAddProductModal(false);
-  };
-
-  const handlePriceChange = (barcode: string, storeKey: 'elnene' | 'eltrebol' | 'eltrebol_suc2', val: number) => {
-    setProducts(prev => prev.map(p => {
-      if (p.barcode === barcode) {
-        return {
-          ...p,
-          prices: {
-            ...p.prices,
-            [storeKey]: Math.max(0, val)
-          }
-        };
-      }
-      return p;
-    }));
-  };
-
-  const deleteProduct = (barcode: string) => {
-    const prod = products.find(p => p.barcode === barcode);
-    if (prod && window.confirm(`¿Seguro que deseas eliminar permanentemente a "${prod.name}" de la Base de Datos?`)) {
-      setProducts(prev => prev.filter(p => p.barcode !== barcode));
-      setCart(prev => prev.filter(item => item.barcode !== barcode));
-      if (scannedBarcode === barcode) {
-        setScannedBarcode("");
-      }
-      addToast("Producto Eliminado", "Se removió de la base de datos y de los carritos.", "info");
-      playBeep();
-    }
-  };
-
   // Calculations for current cart
   const currentScannedProduct = findProductInDatabase(scannedBarcode, products);
 
@@ -621,7 +526,7 @@ export default function App() {
     // Map cart items with active prices
     const itemsWithPrices = cart.map(item => {
       const product = findProductInDatabase(item.barcode, products);
-      const price = product ? product.prices[activeStoreId] : 0;
+      const price = product ? (product.prices[activeStoreId] || 0) : 0;
       return {
         ...item,
         name: product ? product.name : "Producto Desconocido",
@@ -719,42 +624,25 @@ export default function App() {
           </div>
           
           <div className="flex flex-wrap gap-2 justify-center">
-            <button 
-              id="btn-elnene"
-              onClick={() => handleStoreChange('elnene')} 
-              className={`px-4 py-2 rounded-full text-xs font-bold transition-all duration-300 flex items-center gap-1.5 shadow-sm border ${
-                activeStoreId === 'elnene' 
-                  ? 'bg-emerald-600 text-white border-emerald-500 ring-2 ring-emerald-500/30' 
-                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-              QR Súper El Nene
-            </button>
-            <button 
-              id="btn-eltrebol"
-              onClick={() => handleStoreChange('eltrebol')} 
-              className={`px-4 py-2 rounded-full text-xs font-bold transition-all duration-300 flex items-center gap-1.5 shadow-sm border ${
-                activeStoreId === 'eltrebol' 
-                  ? 'bg-emerald-600 text-white border-emerald-500 ring-2 ring-emerald-500/30' 
-                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-sky-400"></span>
-              QR Súper El Trébol
-            </button>
-            <button 
-              id="btn-eltrebol_suc2"
-              onClick={() => handleStoreChange('eltrebol_suc2')} 
-              className={`px-4 py-2 rounded-full text-xs font-bold transition-all duration-300 flex items-center gap-1.5 shadow-sm border ${
-                activeStoreId === 'eltrebol_suc2' 
-                  ? 'bg-emerald-600 text-white border-emerald-500 ring-2 ring-emerald-500/30' 
-                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-              QR Súper Avenida
-            </button>
+            {STORES_CONFIG.map(store => {
+              const colors = getStoreColor(store.color);
+              const isActive = activeStoreId === store.id;
+              return (
+                <button
+                  key={store.id}
+                  id={`btn-${store.id}`}
+                  onClick={() => handleStoreChange(store.id)}
+                  className={`px-4 py-2 rounded-full text-xs font-bold transition-all duration-300 flex items-center gap-1.5 shadow-sm border ${
+                    isActive
+                      ? colors.badgeActive
+                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${colors.dot}`}></span>
+                  QR {store.name}
+                </button>
+              );
+            })}
           </div>
 
           <div className="flex items-center gap-3">
@@ -1005,7 +893,7 @@ export default function App() {
                       <div>
                         <span className="text-[10px] text-amber-800 uppercase font-bold tracking-wider block">Precio de Góndola Activa</span>
                         <span id="scanned-price" className="text-3xl font-black text-amber-950 tracking-tight block">
-                          ${currentScannedProduct.prices[activeStoreId].toLocaleString('es-AR')}
+                          ${(currentScannedProduct.prices[activeStoreId] || 0).toLocaleString('es-AR')}
                         </span>
                       </div>
                       <div className="bg-amber-400/95 text-amber-950 font-black px-3.5 py-2 rounded-xl text-xs tracking-wider shadow">
@@ -1022,12 +910,13 @@ export default function App() {
                       
                       <div className="flex flex-col gap-2">
                         {Object.entries(STORES).map(([key, store]) => {
-                          const storeKey = key as 'elnene' | 'eltrebol' | 'eltrebol_suc2';
-                          const price = currentScannedProduct.prices[storeKey];
+                          const storeKey = key;
+                          const price = currentScannedProduct.prices[storeKey] || 0;
                           const isActive = activeStoreId === storeKey;
+                          const dotColor = getStoreColor(store.color).dot;
                           
                           // Calculate price diff compared to active store
-                          const activePrice = currentScannedProduct.prices[activeStoreId];
+                          const activePrice = currentScannedProduct.prices[activeStoreId] || 0;
                           const isCheaper = price < activePrice;
                           const isMoreExpensive = price > activePrice;
                           const pctDiff = activePrice > 0 ? ((price - activePrice) / activePrice) * 100 : 0;
@@ -1043,10 +932,7 @@ export default function App() {
                               }`}
                             >
                               <div className="flex items-center gap-1.5">
-                                <span className={`w-2 h-2 rounded-full ${
-                                  storeKey === 'elnene' ? 'bg-emerald-400' :
-                                  storeKey === 'eltrebol' ? 'bg-sky-400' : 'bg-amber-400'
-                                }`}></span>
+                                <span className={`w-2 h-2 rounded-full ${dotColor}`}></span>
                                 <span className={`font-semibold ${isActive ? 'text-emerald-950 font-bold' : 'text-slate-600'}`}>
                                   {store.name}
                                 </span>
@@ -1109,7 +995,7 @@ export default function App() {
                                 <span className="text-[9px] text-slate-400 font-mono">Cód: {alt.barcode}</span>
                               </div>
                               <div className="text-right shrink-0">
-                                <span className="text-xs font-bold text-emerald-700 block">${alt.prices[activeStoreId]}</span>
+                                <span className="text-xs font-bold text-emerald-700 block">${alt.prices[activeStoreId] || 0}</span>
                                 <span className="text-[8px] text-slate-400 block">Escanear</span>
                               </div>
                             </div>
@@ -1189,7 +1075,7 @@ export default function App() {
                               <p className="text-[10px] text-slate-400 font-mono">Cód: {p.barcode} • {p.category}</p>
                             </div>
                             <span className="text-xs font-extrabold text-emerald-600 font-mono shrink-0">
-                              ${p.prices[activeStoreId].toLocaleString('es-AR')}
+                              ${(p.prices[activeStoreId] || 0).toLocaleString('es-AR')}
                             </span>
                           </button>
                         ))
@@ -1261,7 +1147,7 @@ export default function App() {
                         <span className="text-[9px] text-slate-400 font-mono">Cód: {prod.barcode} • {prod.category}</span>
                       </div>
                       <div className="text-right shrink-0">
-                        <span className="text-xs font-extrabold text-emerald-700 block font-mono">${prod.prices[activeStoreId].toLocaleString('es-AR')}</span>
+                        <span className="text-xs font-extrabold text-emerald-700 block font-mono">${(prod.prices[activeStoreId] || 0).toLocaleString('es-AR')}</span>
                         <span className="text-[8px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded uppercase">Escanear</span>
                       </div>
                     </button>
@@ -1357,7 +1243,7 @@ export default function App() {
                             <span className="text-[9px] text-slate-400">Escaneado a las {item.timestamp}</span>
                           </div>
                           <span className="font-extrabold text-slate-800 shrink-0 font-mono">
-                            ${prod.prices[activeStoreId]}
+                            ${prod.prices[activeStoreId] || 0}
                           </span>
                         </div>
                       );
@@ -1529,13 +1415,6 @@ export default function App() {
                     <RefreshCw className={`w-4 h-4 ${isSyncingSheets ? 'animate-spin' : ''}`} />
                     {isSyncingSheets ? 'Leyendo Sheets...' : 'Sincronizar en Vivo'}
                   </button>
-                  <button 
-                    onClick={() => setShowAddProductModal(true)}
-                    className="flex-1 sm:flex-none border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold py-2 px-4 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <PlusCircle className="w-4 h-4 text-emerald-600" />
-                    Nuevo Producto
-                  </button>
                 </div>
               </div>
 
@@ -1622,10 +1501,11 @@ export default function App() {
                       <th className="p-3">Código de Barras (Cód)</th>
                       <th className="p-3">Nombre del Producto</th>
                       <th className="p-3">Categoría</th>
-                      <th className="p-3 text-center bg-emerald-50/50 text-emerald-850 border-x border-slate-200">Súper El Nene ($)</th>
-                      <th className="p-3 text-center bg-sky-50/50 text-sky-850 border-x border-slate-200">Súper El Trébol ($)</th>
-                      <th className="p-3 text-center bg-amber-50/50 text-amber-850 border-x border-slate-200">Súper Avenida ($)</th>
-                      <th className="p-3 text-center">Acciones</th>
+                      {STORES_CONFIG.map(store => (
+                        <th key={store.id} className={`p-3 text-center border-x border-slate-200 ${getStoreColor(store.color).thBg}`}>
+                          {store.name} ($)
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody id="db-table-body" className="divide-y divide-slate-150">
@@ -1638,51 +1518,14 @@ export default function App() {
                             {prod.category}
                           </span>
                         </td>
-                        {/* El Nene Price Input */}
-                        <td className="p-2 bg-emerald-50/25 border-x border-slate-150">
-                          <div className="flex items-center justify-center">
-                            <span className="text-slate-400 mr-1 font-bold">$</span>
-                            <input 
-                              type="number" 
-                              value={prod.prices.elnene}
-                              onChange={(e) => handlePriceChange(prod.barcode, 'elnene', Number(e.target.value))}
-                              className="w-20 bg-white border border-slate-200 rounded px-1.5 py-1 text-center font-bold text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                            />
-                          </div>
-                        </td>
-                        {/* El Trébol Price Input */}
-                        <td className="p-2 bg-sky-50/25 border-x border-slate-150">
-                          <div className="flex items-center justify-center">
-                            <span className="text-slate-400 mr-1 font-bold">$</span>
-                            <input 
-                              type="number" 
-                              value={prod.prices.eltrebol}
-                              onChange={(e) => handlePriceChange(prod.barcode, 'eltrebol', Number(e.target.value))}
-                              className="w-20 bg-white border border-slate-200 rounded px-1.5 py-1 text-center font-bold text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-sky-500"
-                            />
-                          </div>
-                        </td>
-                        {/* Avenida Price Input */}
-                        <td className="p-2 bg-amber-50/25 border-x border-slate-150">
-                          <div className="flex items-center justify-center">
-                            <span className="text-slate-400 mr-1 font-bold">$</span>
-                            <input 
-                              type="number" 
-                              value={prod.prices.eltrebol_suc2}
-                              onChange={(e) => handlePriceChange(prod.barcode, 'eltrebol_suc2', Number(e.target.value))}
-                              className="w-20 bg-white border border-slate-200 rounded px-1.5 py-1 text-center font-bold text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
-                            />
-                          </div>
-                        </td>
-                        <td className="p-3 text-center">
-                          <button 
-                            onClick={() => deleteProduct(prod.barcode)}
-                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-all"
-                            title="Eliminar producto"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
+                        {STORES_CONFIG.map(store => (
+                          <td key={store.id} className="p-2 bg-slate-50/60 border-x border-slate-150">
+                            <div className="flex items-center justify-center font-bold text-slate-800 font-mono">
+                              <span className="text-slate-400 mr-1">$</span>
+                              {prod.prices[store.id] || 0}
+                            </div>
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>
@@ -1713,7 +1556,7 @@ export default function App() {
           
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
             {products.map(prod => {
-              const activePrice = prod.prices[activeStoreId];
+              const activePrice = prod.prices[activeStoreId] || 0;
               return (
                 <button 
                   key={prod.barcode}
@@ -1738,113 +1581,6 @@ export default function App() {
       </section>
 
       {/* MODAL NUEVO PRODUCTO */}
-      {showAddProductModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 flex flex-col gap-4">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <PlusCircle className="w-5 h-5 text-emerald-600" />
-                Agregar Nuevo Producto a Góndola
-              </h3>
-              <button 
-                onClick={() => setShowAddProductModal(false)}
-                className="text-slate-400 hover:text-slate-600 text-sm font-bold p-1 rounded-lg hover:bg-slate-100 transition-all"
-              >
-                Cerrar
-              </button>
-            </div>
-
-            <form onSubmit={handleAddProductSubmit} className="flex flex-col gap-4">
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Código de Barras (Único)</label>
-                <input 
-                  type="text"
-                  required
-                  placeholder="Ej: 7791234567890"
-                  value={newBarcode}
-                  onChange={(e) => setNewBarcode(e.target.value.replace(/\D/g, ''))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Nombre del Producto</label>
-                <input 
-                  type="text"
-                  required
-                  placeholder="Ej: Sal Fina Dos Anclas 250g"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Categoría</label>
-                  <select 
-                    value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  >
-                    <option value="Condimentos">Condimentos</option>
-                    <option value="Fideos">Fideos</option>
-                    <option value="Almacén">Almacén</option>
-                    <option value="Bebidas">Bebidas</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-100 pt-3">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Precios en Góndolas ($ ARS)</span>
-                
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-500 block mb-0.5">Súper El Nene</label>
-                    <input 
-                      type="number"
-                      required
-                      min="0"
-                      value={newPriceNene}
-                      onChange={(e) => setNewPriceNene(Number(e.target.value))}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-bold font-mono text-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-500 block mb-0.5">Súper El Trébol</label>
-                    <input 
-                      type="number"
-                      required
-                      min="0"
-                      value={newPriceTrebol}
-                      onChange={(e) => setNewPriceTrebol(Number(e.target.value))}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-bold font-mono text-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-500 block mb-0.5">Súper Avenida</label>
-                    <input 
-                      type="number"
-                      required
-                      min="0"
-                      value={newPriceAvenida}
-                      onChange={(e) => setNewPriceAvenida(Number(e.target.value))}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-bold font-mono text-slate-800"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <button 
-                type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-all shadow-md shadow-emerald-600/10 mt-2"
-              >
-                Dar de Alta Producto
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* FOOTER */}
       <footer className="bg-slate-900 border-t border-slate-800 text-slate-500 text-[11px] py-4 px-6 text-center">
