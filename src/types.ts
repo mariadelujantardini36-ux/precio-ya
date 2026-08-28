@@ -2,11 +2,7 @@ export interface Product {
   barcode: string;
   name: string;
   category: string;
-  prices: {
-    elnene: number;
-    eltrebol: number;
-    eltrebol_suc2: number;
-  };
+  prices: Record<string, number>;
 }
 
 export interface Promo {
@@ -15,7 +11,7 @@ export interface Promo {
 }
 
 export interface Store {
-  id: 'elnene' | 'eltrebol' | 'eltrebol_suc2';
+  id: string;
   name: string;
   sheetId: string;
   sheetName: string;
