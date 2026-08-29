@@ -144,10 +144,9 @@ app.post('/api/sync-sheets', async (req, res) => {
 app.use(express.static(path.join(__dirname, 'dist')));
 
 const PORT = process.env.PORT || 3000;
-if (process.env.NODE_ENV === 'production') {
+if (process.argv[1] && process.argv[1].endsWith('server.js')) {
   app.listen(PORT, () => {
     console.log(`Servidor iniciado en puerto ${PORT}`);
   });
 }
-
 export default app;
