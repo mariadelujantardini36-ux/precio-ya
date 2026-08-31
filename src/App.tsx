@@ -203,8 +203,8 @@ export default function App() {
   });
 
   const [activeStoreId, setActiveStoreId] = useState<string>(STORES_CONFIG[0]?.id || "elnene");
-  const [activeTab, setActiveTab] = useState<'consultar' | 'db'>("consultar");
-  setActiveTab('db')const [dbUnlocked, setDbUnlocked] = useState<boolean>(false);
+    const [activeTab, setActiveTab] = useState<'consultar' | 'db'>("consultar");
+  const [dbUnlocked, setDbUnlocked] = useState<boolean>(false);
   const ADMIN_PIN = "198228";
   const [barcodeInput, setBarcodeInput] = useState<string>("");
   const [scannedBarcode, setScannedBarcode] = useState<string>("");
