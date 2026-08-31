@@ -204,6 +204,8 @@ export default function App() {
 
   const [activeStoreId, setActiveStoreId] = useState<string>(STORES_CONFIG[0]?.id || "elnene");
   const [activeTab, setActiveTab] = useState<'consultar' | 'db'>("consultar");
+  setActiveTab('db')const [dbUnlocked, setDbUnlocked] = useState<boolean>(false);
+  const ADMIN_PIN = "198228";
   const [barcodeInput, setBarcodeInput] = useState<string>("");
   const [scannedBarcode, setScannedBarcode] = useState<string>("");
   const [recentlyScanned, setRecentlyScanned] = useState<ScannedItem[]>([]);
@@ -720,10 +722,21 @@ export default function App() {
               </button>
               <button 
                 id="tab-db"
-                onClick={() => {
-                  setActiveTab('db');
-                  addToast("Base de Datos", "Planilla de Precios Vinculada a Google Sheets", "info");
-                }} 
+                               onClick={() => {
+                  if (dbUnlocked) {
+                    setActiveTab('db');
+                    return;
+                  }
+                  const pin = window.prompt("Ingresá el PIN de administrador para ver la Base de Datos:");
+                  if (pin === null) return;
+                  if (pin.trim() === ADMIN_PIN) {
+                    setDbUnlocked(true);
+                    setActiveTab('db');
+                    addToast("Acceso Autorizado", "Base de Datos desbloqueada.", "success");
+                  } else {
+                    addToast("PIN Incorrecto", "No tenés permiso para ver la Base de Datos.", "error");
+                  }
+                }}
                 className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
                   activeTab === 'db' 
                     ? 'bg-white text-slate-900 shadow-sm' 
