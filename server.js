@@ -18,7 +18,7 @@ export async function processSheetsSync(providedPin) {
   }
 
   const storeMap = [
-    { key: 'eltrebol_suc2', name: 'Súper Avenida', sheetId: process.env.SHEET_ID_AVENIDA },
+    { key: 'eltrebol_suc2', name: 'Supermercado Venado', sheetId: process.env.SHEET_ID_AVENIDA },
     { key: 'eltrebol', name: 'Súper El Trébol', sheetId: process.env.SHEET_ID_TREBOL },
     { key: 'elnene', name: 'Súper El Nene', sheetId: process.env.SHEET_ID_ELNENE },
   ];
