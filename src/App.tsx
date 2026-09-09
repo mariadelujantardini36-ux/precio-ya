@@ -584,7 +584,7 @@ export default function App() {
         const itemDiscount = pimentonItem.itemTotal * 0.05;
         discount += itemDiscount;
         promoBreakdown.push({
-          name: "5% OFF Pimentón x Cantidad (Súper Avenida)",
+          name: "5% OFF Pimentón x Cantidad (Supermercado Venado)",
           amount: itemDiscount
         });
       }
