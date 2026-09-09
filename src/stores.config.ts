@@ -37,9 +37,9 @@ export interface StoreConfigEntry {
 export const STORES_CONFIG: StoreConfigEntry[] = [
   {
     id: "eltrebol_suc2",
-    name: "Súper Avenida",
-    sheetId: "15WS5l_44Fzbwe5mopUXUb_7kihpHY5RTiuTZmUJ9VX0",
-    sheetName: "DB - Súper Avenida",
+    name: "Supermercado Venado",
+    sheetId: "1-zgOUjtfCKoSgQNqkadtt0j3oY-Mh9ISaymeLj_WT3E",
+    sheetName: "DB - Supermercado Venado",
     description: "Sucursal céntrica conectada a Google Sheets en tiempo real.",
     color: "amber",
   },
