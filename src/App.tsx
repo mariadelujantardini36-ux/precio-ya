@@ -165,7 +165,7 @@ export async function fetchLiveProductsFromGoogleSheets(): Promise<{ products: P
     const filledPrices: Record<string, number> = {};
     STORES_CONFIG.forEach(s => {
       const val = prod.prices[s.id] || 0;
-      filledPrices[s.id] = val > 0 ? val : avgPrice;
+      filledPrices[s.id] = val;
     });
 
     return { ...prod, prices: filledPrices };
@@ -953,22 +953,28 @@ export default function App() {
                               </div>
                               
                               <div className="flex items-center gap-2">
-                                <span className="font-bold text-slate-900 font-mono">
-                                  ${price.toLocaleString('es-AR')}
-                                </span>
-                                {!isActive && (
-                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${
-                                    isCheaper ? 'bg-emerald-100 text-emerald-800' :
-                                    isMoreExpensive ? 'bg-rose-100 text-rose-800' :
-                                    'bg-slate-100 text-slate-600'
-                                  }`}>
-                                    {isCheaper && <TrendingDown className="w-3 h-3" />}
-                                    {isMoreExpensive && <TrendingUp className="w-3 h-3" />}
-                                    {isCheaper ? `-${Math.abs(pctDiff).toFixed(0)}%` : 
-                                     isMoreExpensive ? `+${Math.abs(pctDiff).toFixed(0)}%` : 
-                                     'Igual'}
-                                  </span>
-                                )}
+                                          {price > 0 ? (
+            <>
+              <span className="font-bold text-slate-900 font-mono">
+                ${price.toLocaleString('es-AR')}
+              </span>
+              {!isActive && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${
+                  isCheaper ? 'bg-emerald-100 text-emerald-800' :
+                  isMoreExpensive ? 'bg-rose-100 text-rose-800' :
+                  'bg-slate-100 text-slate-600'
+                }`}>
+                  {isCheaper && <TrendingDown className="w-3 h-3" />}
+                  {isMoreExpensive && <TrendingUp className="w-3 h-3" />}
+                  {isCheaper ? `-${Math.abs(pctDiff).toFixed(0)}%` :
+                   isMoreExpensive ? `+${Math.abs(pctDiff).toFixed(0)}%` :
+                   'Igual'}
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-[10px] font-semibold text-slate-400 italic">No disponible</span>
+          )})}
                               </div>
                             </div>
                           );
