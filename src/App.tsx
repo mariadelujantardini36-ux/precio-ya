@@ -974,7 +974,7 @@ export default function App() {
             </>
           ) : (
             <span className="text-[10px] font-semibold text-slate-400 italic">No disponible</span>
-          )})}
+          )}
                               </div>
                             </div>
                           );
