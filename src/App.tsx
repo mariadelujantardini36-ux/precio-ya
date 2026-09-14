@@ -1567,6 +1567,7 @@ export default function App() {
       </main>
 
       {/* BANCO DE PRUEBAS INTERACTIVO */}
+      {import.meta.env.DEV && (
       <section className="bg-white border-t border-slate-200 py-5 px-6 shadow-2xl mt-auto z-10">
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-center mb-3">
@@ -1602,6 +1603,7 @@ export default function App() {
           </div>
         </div>
       </section>
+      )}
 
       {/* MODAL NUEVO PRODUCTO */}
 
