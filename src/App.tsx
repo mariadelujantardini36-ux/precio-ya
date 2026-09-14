@@ -1143,6 +1143,7 @@ export default function App() {
             <section className="lg:col-span-4 flex flex-col gap-6">
               
               {/* BANCO DE PRUEBAS PRODUCTOS DE BASE DE DATOS */}
+              {import.meta.env.DEV && (
               <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm flex flex-col gap-3">
                 <div className="flex justify-between items-center">
                   <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -1175,6 +1176,7 @@ export default function App() {
                   ))}
                 </div>
               </div>
+            )}
 
               {/* OFERTAS DEL DÍA */}
               <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
