@@ -612,6 +612,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans select-none antialiased">
       
       {/* SIMULADOR QR BARRA SUPERIOR */}
+      {import.meta.env.DEV && (
       <div className="bg-slate-900 border-b border-slate-800 text-white py-3 px-4 shadow-xl sticky top-0 z-50 transition-all">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
@@ -665,6 +666,7 @@ export default function App() {
         </div>
       </div>
 
+      )}
       {/* BANNER DE BIENVENIDA */}
       <div className="bg-emerald-50/70 border-b border-emerald-200/50 py-3.5 px-4 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto flex gap-3.5 items-start">
@@ -672,7 +674,7 @@ export default function App() {
             <Sparkles className="w-4 h-4 animate-pulse" />
           </div>
           <div className="flex-1">
-            <h4 className="text-xs font-bold text-emerald-900 tracking-tight uppercase">¡Carrito Multi-Supermercado en Vivo! 🛒</h4>
+      <h4 className="text-xs font-bold text-emerald-900 tracking-tight uppercase">¡Carrito Multi-Supermercado en Vivo! 🛒</h4>
             <p className="text-xs text-emerald-800 leading-relaxed mt-0.5">
               Cambiá de supermercado arriba mediante los botones QR y mirá cómo el carrito se recalcula en un milisegundo utilizando los precios reales del local activo. ¡Compará precios y ahorrá dinero en tiempo real!
             </p>
