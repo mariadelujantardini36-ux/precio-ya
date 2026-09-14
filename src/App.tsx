@@ -683,7 +683,7 @@ export default function App() {
       </div>
 
       {/* CABECERA PRINCIPAL */}
-      <header className="bg-white border-b border-slate-150 py-4 px-6 shadow-sm sticky top-14 md:top-14 z-40 transition-all">
+      <header className="bg-white border-b border-slate-150 py-4 px-6 shadow-sm transition-all">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3.5">
             <div className="bg-emerald-600 text-white p-3 rounded-2xl shadow-lg shadow-emerald-600/20">
