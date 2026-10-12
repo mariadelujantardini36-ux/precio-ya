@@ -688,7 +688,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-1.5">
-                Precio Ya <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full uppercase tracking-widest">v4.0</span>
+                Radar de Góndolas <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full uppercase tracking-widest">v4.0</span>
               </h1>
               <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Lector de Góndola & Comparador Inteligente</p>
             </div>
@@ -1607,7 +1607,7 @@ export default function App() {
       {/* FOOTER */}
       <footer className="bg-slate-900 border-t border-slate-800 text-slate-500 text-[11px] py-4 px-6 text-center">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
-          <p>© 2026 Precio Ya - Lector de Góndola y Carrito Recalculable. Desarrollado en React & Tailwind CSS.</p>
+          <p>© 2026 Radar de Góndolas - Lector de Góndola y Carrito Recalculable. Desarrollado en React & Tailwind CSS.</p>
           <div className="flex gap-4">
             <span>Soporte Sheets API</span>
             <span>Planilla Conectada</span>
