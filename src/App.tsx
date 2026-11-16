@@ -202,7 +202,17 @@ export default function App() {
     return DEFAULT_PRODUCTS;
   });
 
-  const [activeStoreId, setActiveStoreId] = useState<string>(STORES_CONFIG[0]?.id || "elnene");
+  // Si la dirección trae ?local=<id> (por ejemplo el QR de un súper), arranca en ese súper.
+  // Si el id no existe o no viene, se usa el primero de la lista.
+  const [activeStoreId, setActiveStoreId] = useState<string>(() => {
+    try {
+      const localParam = new URLSearchParams(window.location.search).get("local");
+      if (localParam && STORES_CONFIG.some(s => s.id === localParam)) return localParam;
+    } catch {
+      // si falla la lectura de la dirección, seguimos con el valor por defecto
+    }
+    return STORES_CONFIG[0]?.id || "elnene";
+  });
     const [activeTab, setActiveTab] = useState<'consultar' | 'db'>("consultar");
   const [dbUnlocked, setDbUnlocked] = useState<boolean>(false);
   const ADMIN_PIN = "198228";
